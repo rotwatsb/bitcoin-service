@@ -19,8 +19,10 @@ RUN mkdir /project
 
 WORKDIR /project
 
-COPY . .
+COPY ./bitcoin.conf .
 
-RUN chown -R root .
+COPY ./run_bitcoin-service.sh .
 
-CMD ["bitcoind", "-datadir=/data", "-prune=551", "-server", "-rpcuser=$RPC_USER", "-rpcpassword=$RPC_PASSWORD", "-rpcallowip=$RPC_ALLOWED_IP"]
+RUN apt-get update && apt-get -qy install dnsutils
+
+CMD ["./run_bitcoin-service.sh"]
