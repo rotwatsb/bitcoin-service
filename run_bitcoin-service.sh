@@ -1,6 +1,6 @@
 #! /bin/bash
 
-ALLOWED_IP=$(dig +short web)
+ALLOWED_IP=$(dig +short $ALLOWED_CONTAINER)
 
 sed -i "s/ALLOWED_IP/${ALLOWED_IP}/g" bitcoin.conf
 
