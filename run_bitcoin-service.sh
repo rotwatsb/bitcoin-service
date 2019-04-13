@@ -1,6 +1,6 @@
 #! /bin/bash
 
-ALLOWED_IP=$(dig +short $ALLOWED_RPC_HOST)
+ALLOWED_IP=$(dig +short $RPC_CLIENT_HOST)
 
 sed -i "s/ALLOWED_IP/${ALLOWED_IP}/g" bitcoin.conf
 
