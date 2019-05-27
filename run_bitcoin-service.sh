@@ -1,4 +1,4 @@
-#! /bin/bash
+#!/bin/bash
 
 ALLOWED_IP=$(dig +short $RPC_CLIENT_HOST)
 

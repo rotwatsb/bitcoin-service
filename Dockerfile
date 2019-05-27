@@ -2,7 +2,6 @@ FROM debian:buster
 
 EXPOSE 8332
 EXPOSE 8333
-EXPOSE 80
 
 COPY ./logrotate/bitcoind /etc/logrotate.d/
 
