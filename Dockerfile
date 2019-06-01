@@ -9,7 +9,7 @@ RUN apt-get update && apt-get -qy install logrotate
 
 RUN cp /etc/cron.daily/logrotate /etc/cron.hourly/
 
-RUN apt-get update && apt-get -qy install wget
+RUN apt-get update && apt-get -qy install wget curl
 
 RUN wget https://bitcoin.org/bin/bitcoin-core-0.17.0.1/bitcoin-0.17.0.1-x86_64-linux-gnu.tar.gz \
     && tar xzf bitcoin-0.17.0.1-x86_64-linux-gnu.tar.gz \
