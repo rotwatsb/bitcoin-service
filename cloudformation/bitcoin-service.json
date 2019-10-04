@@ -1,0 +1,307 @@
+{
+    "Parameters": {
+        "VpcId" : {
+            "Type" : "AWS::EC2::VPC::Id",
+            "Description":"Select a VPC that allows instances to access the Internet."
+        },
+        "SecurityGroupId" : {
+            "Type" : "AWS::EC2::SecurityGroup::Id",
+            "Description" : "Select the security group"
+        },
+        "PublicSubnetIds" : {
+            "Type" : "List<AWS::EC2::Subnet::Id>",
+            "Description" : "Select at least two subnets in your selected VPC."
+        },
+        "PrivateSubnetIds" : {
+            "Type" : "List<AWS::EC2::Subnet::Id>",
+            "Description" : "Select at least two subnets in your selected VPC."
+        },
+        "PrivateDnsNamespaceId" : {
+            "Type" : "String"
+        },
+        "ECSClusterName" : {
+            "Type" : "String"
+        },
+        "CloudwatchLogsGroupName" : {
+            "Type" : "String"
+        }
+    },
+    "Resources" : {
+        "bitcoindContainerInstances" : {
+            "Type" : "AWS::AutoScaling::LaunchConfiguration",
+            "Properties" : {
+                "ImageId" : "ami-0fbc9fff39b859770",
+                "SecurityGroups" : [
+                    {
+                        "Ref" : "SecurityGroupId"
+                    }
+                ],
+                "InstanceType" : "t2.micro",
+                "IamInstanceProfile": "arn:aws:iam::139008324031:instance-profile/role-ecs-instance-peanuts",
+                "EbsOptimized" : false,
+                "KeyName" : "rotwatsb-key-pair-useast2",
+                "AssociatePublicIpAddress" : false,
+                "BlockDeviceMappings" : [
+                    {
+                        "DeviceName" : "/dev/xvda",
+                        "Ebs" : {
+                            "DeleteOnTermination" : true,
+                            "SnapshotId" : "snap-02f7e7dc045b9fc1f",
+                            "VolumeSize" : 30,
+                            "VolumeType" : "gp2"
+                        }
+                    }
+                ],
+                "UserData": {
+                    "Fn::Base64":{
+                        "Fn::Join":[
+                            "",
+                            [
+                                "#!/bin/bash -xe\n",
+                                "echo ECS_CLUSTER=",
+                                {
+                                    "Ref" : "ECSClusterName"
+                                },
+                                " >> /etc/ecs/ecs.config\n",
+                                "yum install -y aws-cfn-bootstrap\n",
+                                "/opt/aws/bin/cfn-signal -e $? ",
+                                "         --stack ",
+                                {
+                                    "Ref" : "AWS::StackName"
+                                },
+                                "         --resource bitcoindECSAutoScalingGroup ",
+                                "         --region us-east-2\n",
+                                "docker plugin install rexray/ebs REXRAY_PREEMPT=true EBS_REGION=us-east-2 --grant-all-permissions\n"
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+        "bitcoindECSAutoScalingGroup" : {
+            "Type" : "AWS::AutoScaling::AutoScalingGroup",
+            "Properties" : {
+                "VPCZoneIdentifier": {
+                    "Ref" : "PrivateSubnetIds"
+                },
+                "LaunchConfigurationName" : {
+                    "Ref" : "bitcoindContainerInstances"
+                },
+                "MinSize" : "1",
+                "MaxSize" : "1",
+                "DesiredCapacity" : "1"
+            },
+            "CreationPolicy" : {
+                "ResourceSignal" : {
+                    "Timeout" : "PT15M"
+                }
+            },
+            "UpdatePolicy" : {
+                "AutoScalingReplacingUpdate" : {
+                    "WillReplace" : "true"
+                }
+            }
+        },
+        "bitcoindTaskDefinition" : {
+            "Type" : "AWS::ECS::TaskDefinition",
+            "Properties" : {
+                "ExecutionRoleArn" : "arn:aws:iam::139008324031:role/role-task-execution-peanuts",
+                "NetworkMode" : "awsvpc",
+                "TaskRoleArn":  "arn:aws:iam::139008324031:role/role-task-peanuts",
+                "Volumes" : [
+                    {
+                        "Name" : "peanuts-bitcoin-volume",
+                        "DockerVolumeConfiguration" : {
+                            "Autoprovision" : true,
+                            "Driver" : "rexray/ebs",
+                            "Scope" : "shared",
+                            "DriverOpts" : {
+                                "VolumeType": "gp2",
+                                "Size": "10"
+                            }
+                        }
+                    }
+                ],
+                "ContainerDefinitions" : [
+                    {
+                        "Name" : "bitcoind",
+                        "Image" : "rotwatsb/bitcoin-service:latest",
+                        "Cpu" : 0,
+                        "MemoryReservation" : 500,
+                        "Essential" : true,
+                        "LogConfiguration" : {
+                            "LogDriver" : "awslogs",
+                            "Options" : {
+                                "awslogs-group" : {
+                                    "Ref" : "CloudwatchLogsGroupName"
+                                },
+                                "awslogs-region" : "us-east-2",
+                                "awslogs-stream-prefix" : "bitcoind"
+                            }
+                        },
+                        "ReadonlyRootFilesystem" : false,
+                        "MountPoints" : [
+                            {
+                                "ContainerPath" : "/data",
+                                "SourceVolume" : "peanuts-bitcoin-volume",
+                                "ReadOnly" : false
+                            }
+                        ],
+                        "Environment" : [
+                            {
+                                "Name" : "RPC_CLIENT_HOST",
+                                "Value" : "peanuts.private-peanuts.net"
+                            }
+                        ],
+                        "Secrets" : [
+                            {
+                                "Name" : "RPC_PASSWORD",
+                                "ValueFrom" : "arn:aws:ssm:us-east-2:139008324031:parameter/BITCOIN_RPC_PW"
+                            },
+                            {
+                                "Name" : "RPC_USER",
+                                "ValueFrom" : "arn:aws:ssm:us-east-2:139008324031:parameter/BITCOIN_RPC_USER"
+                            }
+                        ],
+                        "PortMappings" : [
+                            {
+                                "ContainerPort" : 8333,
+                                "HostPort" : 8333,
+                                "Protocol" : "tcp"
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        "bitcoindServiceDiscoveryService" : {
+            "Type" : "AWS::ServiceDiscovery::Service",
+            "Properties" : {
+                "Description" : "Private bitcoind discovery service",
+                "DnsConfig" : {
+                    "DnsRecords" : [
+                        {
+                            "Type" : "A",
+                            "TTL" : 60
+                        }
+                    ],
+                    "RoutingPolicy" : "WEIGHTED"
+                },
+                "Name" : "bitcoind",
+                "NamespaceId" : {
+                    "Ref" : "PrivateDnsNamespaceId"
+                }
+            }
+        },
+        "bitcoindECSService" : {
+            "Type" : "AWS::ECS::Service",
+            "Properties" : {
+                "Cluster" : {
+                    "Ref" : "ECSClusterName"
+                },
+                "TaskDefinition" : {
+                    "Ref" : "bitcoindTaskDefinition"
+                },
+                "DesiredCount" : 1,
+                "LaunchType" : "EC2",
+                "NetworkConfiguration" : {
+                    "AwsvpcConfiguration" : {
+                        "Subnets" : {
+                            "Ref" : "PrivateSubnetIds"
+                        },
+                        "SecurityGroups" : [
+                            {
+                                "Ref" : "SecurityGroupId"
+                            }
+                        ]
+                    }
+                },
+                "ServiceRegistries" : [
+                    {
+                        "RegistryArn" : {
+                            "Fn::GetAtt" : [
+                                "bitcoindServiceDiscoveryService",
+                                "Arn"
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "bitcoindAutoscalingRole" : {
+            "Type" : "AWS::IAM::Role",
+            "Properties" : {
+                "AssumeRolePolicyDocument" : {
+                    "Statement" : [
+                        {
+                            "Effect" : "Allow",
+                            "Principal" : {
+                                "Service" : [
+                                    "application-autoscaling.amazonaws.com"
+                                ]
+                            },
+                            "Action" : [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path" : "/",
+                "Policies" : [
+                    {
+                        "PolicyName" : "service-autoscaling",
+                        "PolicyDocument" : {
+                            "Statement" : [
+                                {
+                                    "Effect" : "Allow",
+                                    "Action" : [
+                                        "application-autoscaling:*",
+                                        "cloudwatch:DescribeAlarms",
+                                        "cloudwatch:PutMetricAlarm",
+                                        "ecs:DescribeServices",
+                                        "ecs:UpdateService"
+                                    ],
+                                    "Resource" : "*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "bitcoindScalingTarget" : {
+            "Type" : "AWS::ApplicationAutoScaling::ScalableTarget",
+            "DependsOn" : "bitcoindECSService",
+            "Properties" : {
+                "MaxCapacity" : 2,
+                "MinCapacity" : 1,
+                "ResourceId" : {
+                    "Fn::Join" : [
+                        "",
+                        [
+                            "service/",
+                            {
+                                "Ref" : "ECSClusterName"
+                            },
+                            "/",
+                            {
+                                "Fn::GetAtt" : [
+                                    "bitcoindECSService",
+                                    "Name"
+                                ]
+                            }
+                        ]
+                    ]
+                },
+                "RoleARN" : {
+                    "Fn::GetAtt" : [
+                        "bitcoindAutoscalingRole",
+                        "Arn"
+                    ]
+                },
+                "ScalableDimension" : "ecs:service:DesiredCount",
+                "ServiceNamespace" : "ecs"
+            }
+        }
+    }
+}

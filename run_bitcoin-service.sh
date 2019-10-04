@@ -3,6 +3,7 @@
 while [ -z "$ALLOWED_IP" ]
 do
     sleep 1
+    echo "Trying to resolve ${RPC_CLIENT_HOST} ..."
     ALLOWED_IP=$(dig +short $RPC_CLIENT_HOST)
 done
 
