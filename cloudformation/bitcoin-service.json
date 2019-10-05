@@ -4,9 +4,9 @@
             "Type" : "AWS::EC2::VPC::Id",
             "Description":"Select a VPC that allows instances to access the Internet."
         },
-        "SecurityGroupId" : {
-            "Type" : "AWS::EC2::SecurityGroup::Id",
-            "Description" : "Select the security group"
+        "AllowedSSHCidr" : {
+            "Type" : "String",
+            "Description" : "Enter the IP/32 that will be allowed ssh access :"
         },
         "PublicSubnetIds" : {
             "Type" : "List<AWS::EC2::Subnet::Id>",
@@ -27,13 +27,66 @@
         }
     },
     "Resources" : {
+        "bitcoindSecurityGroup" : {
+            "Type" : "AWS::EC2::SecurityGroup",
+            "Properties" : {
+                "GroupDescription" : "Allow http, ssh from bastion, and bitcoin traffic",
+                "VpcId" : {
+                    "Ref" : "VpcId"
+                },
+                "SecurityGroupIngress" : [
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort" : 80,
+                        "ToPort" : 80,
+                        "CidrIp" : "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort" : 80,
+                        "ToPort" : 80,
+                        "CidrIpv6" : "::/0"
+                    },
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort" : 8333,
+                        "ToPort" : 8333,
+                        "CidrIp" : "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort" : 8333,
+                        "ToPort" : 8333,
+                        "CidrIpv6" : "::/0"
+                    },
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort" : 8332,
+                        "ToPort" : 8332,
+                        "CidrIp" : "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort" : 8332,
+                        "ToPort" : 8332,
+                        "CidrIpv6" : "::/0"
+                    },
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort" : 22,
+                        "ToPort" : 22,
+                        "CidrIp" : { "Ref" : "AllowedSSHCidr" }
+                    }
+                ]
+            }
+        },
         "bitcoindContainerInstances" : {
             "Type" : "AWS::AutoScaling::LaunchConfiguration",
             "Properties" : {
                 "ImageId" : "ami-0fbc9fff39b859770",
                 "SecurityGroups" : [
                     {
-                        "Ref" : "SecurityGroupId"
+                        "Ref" : "bitcoindSecurityGroup"
                     }
                 ],
                 "InstanceType" : "t2.micro",
@@ -71,7 +124,8 @@
                                 },
                                 "         --resource bitcoindECSAutoScalingGroup ",
                                 "         --region us-east-2\n",
-                                "docker plugin install rexray/ebs REXRAY_PREEMPT=true EBS_REGION=us-east-2 --grant-all-permissions\n"
+                                "docker plugin install rexray/ebs REXRAY_PREEMPT=true EBS_REGION=us-east-2 --grant-all-permissions\n",
+                                "yum install -y bind-utils\n",
                             ]
                         ]
                     }
@@ -168,6 +222,11 @@
                                 "ContainerPort" : 8333,
                                 "HostPort" : 8333,
                                 "Protocol" : "tcp"
+                            },
+                            {
+                                "ContainerPort" : 8332,
+                                "HostPort" : 8332,
+                                "Protocol" : "tcp"
                             }
                         ]
                     }
@@ -211,7 +270,7 @@
                         },
                         "SecurityGroups" : [
                             {
-                                "Ref" : "SecurityGroupId"
+                                "Ref" : "bitcoindSecurityGroup"
                             }
                         ]
                     }
